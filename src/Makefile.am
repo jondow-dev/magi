@@ -310,6 +310,7 @@ BITCOIN_CORE_H = \
   util/types.h \
   util/ui_change_type.h \
   util/vector.h \
+  main.h \
   validation.h \
   validationinterface.h \
   wallet/bdb.h \
@@ -432,6 +433,7 @@ libbitcoin_node_a_SOURCES = \
   txmempool.cpp \
   txorphanage.cpp \
   txrequest.cpp \
+  main.cpp \
   validation.cpp \
   validationinterface.cpp \
   kernel.cpp \

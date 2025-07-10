@@ -13,6 +13,7 @@
 #include <txmempool.h>
 #include <validation.h>
 #include <util/system.h>
+#include <chain.h> // For mapBlockIndex
 
 #include <unordered_map>
 
@@ -206,16 +207,25 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
         return READ_STATUS_INVALID;
 
     BlockValidationState state;
+    CBlockIndex* pindex = nullptr;
+    if (block.GetBlockHeader().hashPrevBlock != uint256()) {
+        auto it = mapBlockIndex.find(block.GetBlockHeader().hashPrevBlock);
+        if (it != mapBlockIndex.end()) {
+            pindex = it->second;
+        }
+    }
     CheckBlockFn check_block = m_check_block_mock ? m_check_block_mock : CheckBlock;
-    if (!check_block(block, state, Params().GetConsensus(), /*fCheckPoW=*/true, /*fCheckMerkleRoot=*/true, true)) {
+    if (!check_block(block, state, Params().GetConsensus(), pindex, /*fCheckPoW=*/true, /*fCheckMerkleRoot=*/true, true)) {
         // TODO: We really want to just check merkle tree manually here,
         // but that is expensive, and CheckBlock caches a block's
         // "checked-status" (in the CBlock?). CBlock should be able to
         // check its own merkle root and cache that check.
         if (state.GetResult() == BlockValidationResult::BLOCK_MUTATED)
-            return READ_STATUS_FAILED; // Possible Short ID collision
+            return READ_STATUS_FAILED;
         return READ_STATUS_CHECKBLOCK_FAILED;
     }
+    return READ_STATUS_OK;
+}
 
     LogPrint(BCLog::CMPCTBLOCK, "Successfully reconstructed block %s with %lu txn prefilled, %lu txn from mempool (incl at least %lu from extra pool) and %lu txn requested\n", hash.ToString(), prefilled_count, mempool_count, extra_count, vtx_missing.size());
     if (vtx_missing.size() < 5) {
