@@ -1411,108 +1411,20 @@ double GetDifficultyFromBits(unsigned int nBits) {
 
 int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
 {
-    // Estimate block height (2 min/block for Magi)
-    int nHeight = (nTime - GENESIS_TIME) / 120;
-    double nDiff = GetDifficultyFromBits(nBits);
-    int64_t nFees = 0; // Fees not included in Peercoin’s signature
-    int64_t nSubsidy = 0;
-
-    // Testnet logic
-    if (Params().TestNet() && (nHeight % 2 == 0))
-    {
-        if (nHeight <= 10)
-        {
-            nSubsidy = 100000 * COIN; // Testnet premine
-            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR-testnet nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                     nHeight, nSubsidy / COIN, nDiff);
-            return nSubsidy + nFees;
-        }
-        nSubsidy = (100 * COIN) >> (nHeight / 1051200); // Halve every ~2 years
-        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR-testnet nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                 nHeight, nSubsidy / COIN, nDiff);
-        return nSubsidy + nFees;
+    if (nHeight == 1) {
+        return 11250000 * COIN; // Premine
     }
-
-    /*	Notes of 11 premined blocks, totally: 1,237,505 XMG
-	Coins burned: 720,000 XMG https://bchain.info/XMG/addr/93m4hAxmCcGXMfnjVPfNhWSjb69sDziGSY
-				  https://bitcointalk.org/index.php?topic=735170.msg9475622#msg9475622
-	Coins used to push PoM campaign: 112,505 XMG (https://bitcointalk.org/index.php?topic=802681.0)
-
-	Remaining coins are: 404,995 (1.65%), that includes: 
-	Coin swap: 233,319 XMG (0.93%)
-	Leftover: 171,676 XMG (0.69%) - promotion (givaway + bounties for community members' contribution), staff salary
-
-	Coin swap: rule of swap - total coins swapped/Coins in circulation ~ 10% or less
-	Some of posts regarding the coin swap: 
-	https://bitcointalk.org/index.php?topic=821170.0
-	https://bitcointalk.org/index.php?topic=735170.msg8950501#msg8950501
-	https://bitcointalk.org/index.php?topic=735170.msg9111697#msg9111697
-	
-	Details: https://bitcointalk.org/index.php?topic=735170.msg9900074#msg9900074
-    */
-    // Mainnet logic
-    if (nHeight <= 10 && !Params().TestNet())
-    {
-        nSubsidy = 112500 * COIN; // Premine
-        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                 nHeight, nSubsidy / COIN, nDiff);
+    CAmount nSubsidy;
+    if (nHeight <= 10000) {
+        nSubsidy = 10000 * COIN;
+    } else if (nHeight <= 32750) { // Before M7M-v2 fork
+        nSubsidy = 5000 * COIN;
+    } else if (nHeight <= 1446600) { // Before maturity adjustment
+        nSubsidy = 2500 * COIN;
+    } else {
+        nSubsidy = 1250 * COIN;
     }
-    else if (nHeight <= PRM_MAGI_POW_HEIGHT_V2) // PoW-I phase
-    {
-        if (nHeight <= BLOCK_REWARD_ADJT)
-        {
-            double reward = 495.05 * pow((5.55243 * (exp_n(-0.3 * nDiff / 15.762) - exp_n(-0.6 * nDiff / 15.762))) * nDiff, 0.5) / 8.61553;
-            reward = std::max(reward, 5.0);
-            nSubsidy = static_cast<int64_t>(reward * COIN);
-            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                     nHeight, nSubsidy / COIN, nDiff);
-        }
-        else if (nHeight <= BLOCK_REWARD_ADJT_M7M_V2)
-        {
-            double nDiffcu = (nHeight <= 2700) ? 2.2 : (2.2 + (nHeight - 2700) * 0.0000274841);
-            double reward = 294.118 * pow((5.55243 * (exp_n(-0.3 * nDiff / 0.39) - exp_n(-0.6 * nDiff / 0.39))) * nDiff, 0.5) / 1.335
-                            * exp_n2(nDiff / 0.08, nDiffcu / 0.08);
-            reward = std::max(reward, 5.0);
-            nSubsidy = static_cast<int64_t>(reward * COIN);
-            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                     nHeight, nSubsidy / COIN, nDiff);
-        }
-        else
-        {
-            double nDiffcu = (nHeight <= 2700) ? 2.2 / M7Mv2_SCALE : (2.2 + (nHeight - 2700) * 0.0000183227) / M7Mv2_SCALE;
-            double reward = 294.118 * pow((5.55243 * (exp_n(-0.3 * nDiff / (0.39 * M7Mv2_SCALE)) - exp_n(-0.6 * nDiff / (0.39 * M7Mv2_SCALE)))) * nDiff, 0.5) / 0.8456
-                            * exp_n2(nDiff / (0.08 / M7Mv2_SCALE), nDiffcu / (0.08 / M7Mv2_SCALE));
-            reward = std::max(reward, 5.0);
-            nSubsidy = static_cast<int64_t>(reward * COIN);
-            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                     nHeight, nSubsidy / COIN, nDiff);
-        }
-    }
-    else if (nHeight <= END_MAGI_POW_HEIGHT_V2) // PoW-II phase
-    {
-        double nDiffcu = log(nHeight) * 0.1;
-        double reward = 50 * pow((5.55243 * (exp_n(-0.3 * nDiff / (0.39 * M7Mv2_SCALE)) - exp_n(-0.6 * nDiff / (0.39 * M7Mv2_SCALE)))) * nDiff, 0.5) / 0.8456
-                        * exp_n2(nDiff / (0.16 / M7Mv2_SCALE), nDiffcu / (0.16 / M7Mv2_SCALE));
-        reward = std::max(reward, 3.0);
-        nSubsidy = static_cast<int64_t>(reward * COIN);
-        // Yearly decline (7% per 525,600 blocks)
-        int64_t nSubsidyInt = nSubsidy;
-        for (int i = 525600; i <= nHeight; i += 525600)
-        {
-            nSubsidyInt = (nSubsidyInt * 93) / 100;
-        }
-        nSubsidy = nSubsidyInt;
-        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                 nHeight, nSubsidy / COIN, nDiff);
-    }
-    else // Post-PoW phase
-    {
-        nSubsidy = MIN_TX_FEE; // Assume defined in main.h (e.g., 0.0001 XMG)
-        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                                 nHeight, nSubsidy / COIN, nDiff);
-    }
-
-    return nSubsidy + nFees;
+    return nSubsidy;
 }
 
 // peercoin: miner's coin stake is rewarded based on coin age spent (coin-days)
