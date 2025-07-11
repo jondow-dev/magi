@@ -1418,18 +1418,18 @@ int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
     int64_t nSubsidy = 0;
 
     // Testnet logic
-    if (Params().IsTestNet() && (nHeight % 2 == 0))
+    if (Params().TestNet() && (nHeight % 2 == 0))
     {
         if (nHeight <= 10)
         {
             nSubsidy = 100000 * COIN; // Testnet premine
-            if (fDebug) LogPrintf("@@GPoWR-testnet nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                  nHeight, nSubsidy / COIN, nDiff);
+            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR-testnet nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                     nHeight, nSubsidy / COIN, nDiff);
             return nSubsidy + nFees;
         }
         nSubsidy = (100 * COIN) >> (nHeight / 1051200); // Halve every ~2 years
-        if (fDebug) LogPrintf("@@GPoWR-testnet nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                              nHeight, nSubsidy / COIN, nDiff);
+        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR-testnet nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                 nHeight, nSubsidy / COIN, nDiff);
         return nSubsidy + nFees;
     }
 
@@ -1451,11 +1451,11 @@ int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
 	Details: https://bitcointalk.org/index.php?topic=735170.msg9900074#msg9900074
     */
     // Mainnet logic
-    if (nHeight <= 10 && !Params().IsTestNet())
+    if (nHeight <= 10 && !Params().TestNet())
     {
         nSubsidy = 112500 * COIN; // Premine
-        if (fDebug) LogPrintf("@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                              nHeight, nSubsidy / COIN, nDiff);
+        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                 nHeight, nSubsidy / COIN, nDiff);
     }
     else if (nHeight <= PRM_MAGI_POW_HEIGHT_V2) // PoW-I phase
     {
@@ -1464,8 +1464,8 @@ int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
             double reward = 495.05 * pow((5.55243 * (exp_n(-0.3 * nDiff / 15.762) - exp_n(-0.6 * nDiff / 15.762))) * nDiff, 0.5) / 8.61553;
             reward = std::max(reward, 5.0);
             nSubsidy = static_cast<int64_t>(reward * COIN);
-            if (fDebug) LogPrintf("@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                  nHeight, nSubsidy / COIN, nDiff);
+            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                     nHeight, nSubsidy / COIN, nDiff);
         }
         else if (nHeight <= BLOCK_REWARD_ADJT_M7M_V2)
         {
@@ -1474,8 +1474,8 @@ int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
                             * exp_n2(nDiff / 0.08, nDiffcu / 0.08);
             reward = std::max(reward, 5.0);
             nSubsidy = static_cast<int64_t>(reward * COIN);
-            if (fDebug) LogPrintf("@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                  nHeight, nSubsidy / COIN, nDiff);
+            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                     nHeight, nSubsidy / COIN, nDiff);
         }
         else
         {
@@ -1484,8 +1484,8 @@ int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
                             * exp_n2(nDiff / (0.08 / M7Mv2_SCALE), nDiffcu / (0.08 / M7Mv2_SCALE));
             reward = std::max(reward, 5.0);
             nSubsidy = static_cast<int64_t>(reward * COIN);
-            if (fDebug) LogPrintf("@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                                  nHeight, nSubsidy / COIN, nDiff);
+            if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                     nHeight, nSubsidy / COIN, nDiff);
         }
     }
     else if (nHeight <= END_MAGI_POW_HEIGHT_V2) // PoW-II phase
@@ -1502,14 +1502,14 @@ int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
             nSubsidyInt = (nSubsidyInt * 93) / 100;
         }
         nSubsidy = nSubsidyInt;
-        if (fDebug) LogPrintf("@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                              nHeight, nSubsidy / COIN, nDiff);
+        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                 nHeight, nSubsidy / COIN, nDiff);
     }
     else // Post-PoW phase
     {
         nSubsidy = MIN_TX_FEE; // Assume defined in main.h (e.g., 0.0001 XMG)
-        if (fDebug) LogPrintf("@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
-                              nHeight, nSubsidy / COIN, nDiff);
+        if (GetBoolArg("-debug", false)) LogPrint("pow", "@@GPoWR nHeight = %d, nSubsidy = %" PRId64 ", nDiff = %f\n", 
+                                                 nHeight, nSubsidy / COIN, nDiff);
     }
 
     return nSubsidy + nFees;
