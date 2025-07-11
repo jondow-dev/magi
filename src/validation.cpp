@@ -58,6 +58,8 @@
 #include <util/translation.h>
 #include <validationinterface.h>
 #include <warnings.h>
+#include <crypto/magimath.h>  // For mapBlockIndex and Magi constants
+#include <magi.h>             // New include for mapBlockIndex
 
 #include <algorithm>
 #include <cassert>
@@ -72,6 +74,9 @@
 
 #include <string>
 #include <utility>
+
+// Define mapBlockIndex
+std::map<uint256, CBlockIndex*> mapBlockIndex;
 
 using kernel::CCoinsStats;
 using kernel::CoinStatsHashType;
@@ -1384,37 +1389,79 @@ PackageMempoolAcceptResult ProcessNewPackage(Chainstate& active_chainstate, CTxM
     return result;
 }
 
-int64_t GetProofOfWorkReward(unsigned int nBits, uint32_t nTime)
-{
-    CBigNum bnSubsidyLimit = MAX_MINT_PROOF_OF_WORK;
-    CBigNum bnTarget;
-    bnTarget.SetCompact(nBits);
-    CBigNum bnTargetLimit(Params().GetConsensus().powLimit);
-    bnTargetLimit.SetCompact(bnTargetLimit.GetCompact());
+double GetDifficultyFromBits(unsigned int nBits){
+    int nShift = (nBits >> 24) & 0xff;
 
-    // peercoin: subsidy is cut in half every 16x multiply of difficulty
-    // A reasonably continuous curve is used to avoid shock to market
-    // (nSubsidyLimit / nSubsidy) ** 4 == bnProofOfWorkLimit / bnTarget
-    CBigNum bnLowerBound = CENT;
-    CBigNum bnUpperBound = bnSubsidyLimit;
-    while (bnLowerBound + CENT <= bnUpperBound)
+    double dDiff =
+        (double)0x0000ffff / (double)(nBits & 0x00ffffff);
+
+    while (nShift < 29)
     {
-        CBigNum bnMidValue = (bnLowerBound + bnUpperBound) / 2;
-        if (gArgs.GetBoolArg("-printcreation", false))
-            LogPrintf("%s: lower=%lld upper=%lld mid=%lld\n", __func__, bnLowerBound.getuint64(), bnUpperBound.getuint64(), bnMidValue.getuint64());
-        if (bnMidValue * bnMidValue * bnMidValue * bnMidValue * bnTargetLimit > bnSubsidyLimit * bnSubsidyLimit * bnSubsidyLimit * bnSubsidyLimit * bnTarget)
-            bnUpperBound = bnMidValue;
-        else
-            bnLowerBound = bnMidValue;
+        dDiff *= 256.0;
+        nShift++;
     }
+    while (nShift > 29)
+    {
+        dDiff /= 256.0;
+        nShift--;
+    }
+    return dDiff;
+}
 
-    int64_t nSubsidy = bnUpperBound.getuint64();
-    nSubsidy = (nSubsidy / CENT) * CENT;
+// Magi-specific constants (verified from https://github.com/m-pays/magi/blob/master/src/main.h)
+#define M7Mv2_SCALE 2.545
+#define PRM_MAGI_POW_HEIGHT_V2 50000 // re-cal PoW-I end block
+#define END_MAGI_POW_HEIGHT_V2 5000000 // PoW-II aims to issue 12 mil and more than 10 years
+#define BLOCK_REWARD_ADJT 2700
+#define BLOCK_REWARD_ADJT_M7M_V2 32750
+static const uint32_t GENESIS_TIME = 1410566399; // Magi genesis (~Fri Sep 12 2014 23:59:59 GMT+0000)
 
-    nSubsidy = std::min(nSubsidy, IsProtocolV10(nTime) ? MAX_MINT_PROOF_OF_WORK_V10 : MAX_MINT_PROOF_OF_WORK);
+// Changed signature to match expected calls: unsigned int instead of int, removed nFees
+// GetProofOfWorkReward
+int64_t GetProofOfWorkReward(unsigned int nBits, unsigned int nHeight)
+{
+    double nDiff = GetDifficultyFromBits(nBits);
 
-    if (gArgs.GetBoolArg("-printcreation", false))
-        LogPrintf("%s: create=%s nBits=0x%08x nSubsidy=%lld\n", __func__, FormatMoney(nSubsidy), nBits, nSubsidy);
+    int64_t nSubsidy = 0;
+    
+    if (nHeight <= 10)
+    {
+        nSubsidy = 112500 * COIN; // 112,500 XMG
+    }
+    else if (nHeight <= PRM_MAGI_POW_HEIGHT_V2)
+    {
+        if (nHeight <= BLOCK_REWARD_ADJT) {
+            nSubsidy = 495.05 * pow((5.55243 * (exp_n(-0.3 * nDiff / 15.762) - exp_n(-0.6 * nDiff / 15.762))) * nDiff, 0.5) / 8.61553;
+            if (nSubsidy < 5) nSubsidy = 5;
+            nSubsidy *= COIN;
+        }
+        else if (nHeight <= BLOCK_REWARD_ADJT_M7M_V2) {
+            double nDiffcu = ((nHeight <= 2700) ? 2.2 : (2.2 + (nHeight - 2700) * 0.0000274841));
+            nSubsidy = 294.118 * pow((5.55243 * (exp_n(-0.3 * nDiff / 0.39) - exp_n(-0.6 * nDiff / 0.39))) * nDiff, 0.5) / 1.335
+                       * exp_n2(nDiff / 0.08, nDiffcu / 0.08);
+            if (nSubsidy < 5) nSubsidy = 5;
+            nSubsidy *= COIN;
+        }
+        else {
+            double nDiffcu = ((nHeight <= 2700) ? 2.2 / M7Mv2_SCALE : ((2.2 + (nHeight - 2700) * 0.0000183227)) / M7Mv2_SCALE);
+            nSubsidy = 294.118 * pow((5.55243 * (exp_n(-0.3 * nDiff / 0.39 * M7Mv2_SCALE) - exp_n(-0.6 * nDiff / 0.39 * M7Mv2_SCALE))) * nDiff, 0.5) / 0.8456
+                       * exp_n2(nDiff / (0.08 / M7Mv2_SCALE), nDiffcu / (0.08 / M7Mv2_SCALE));
+            if (nSubsidy < 5) nSubsidy = 5;
+            nSubsidy *= COIN;
+        }
+    }
+    else if (nHeight <= END_MAGI_POW_HEIGHT_V2)
+    {
+        double nDiffcu = log(nHeight) * 0.1;
+        nSubsidy = 50 * pow((5.55243 * (exp_n(-0.3 * nDiff / 0.39 * M7Mv2_SCALE) - exp_n(-0.6 * nDiff / 0.39 * M7Mv2_SCALE))) * nDiff, 0.5) / 0.8456
+                   * exp_n2(nDiff / (0.16 / M7Mv2_SCALE), nDiffcu / (0.16 / M7Mv2_SCALE));
+        if (nSubsidy < 3) nSubsidy = 3;
+        nSubsidy *= COIN;
+        for (int i = 525600; i <= nHeight; i += 525600) nSubsidy *= 0.93;
+    }
+    else {
+        nSubsidy = MIN_TX_FEE;
+    }
 
     return nSubsidy;
 }
@@ -3427,12 +3474,33 @@ bool CheckBlock(const CBlock& block, BlockValidationState& state, const Consensu
     // Check coinbase reward
     CAmount nCoinbaseCost = 0;
     if (block.IsProofOfWork())
-        nCoinbaseCost = (GetMinFee(*block.vtx[0], block.nTime) < PERKB_TX_FEE)? 0 : (GetMinFee(*block.vtx[0], block.nTime) - PERKB_TX_FEE);
-    if (block.vtx[0]->GetValueOut() > (block.IsProofOfWork()? (GetProofOfWorkReward(block.nBits, block.GetBlockTime()) - nCoinbaseCost) : 0))
+        nCoinbaseCost = (GetMinFee(*block.vtx[0], block.nTime) < PERKB_TX_FEE) ? 0 : (GetMinFee(*block.vtx[0], block.nTime) - PERKB_TX_FEE);
+
+    // Get block height from mapBlockIndex
+    int nHeight = 0;
+    auto it = mapBlockIndex.find(block.GetHash());
+    if (it != mapBlockIndex.end()) {
+        nHeight = it->second->nHeight;
+    } else {
+        // Fallback for genesis block or early reindexing
+        if (block.hashPrevBlock == uint256()) {
+            nHeight = 0; // Genesis block
+        } else {
+            // Try previous block
+            auto itPrev = mapBlockIndex.find(block.hashPrevBlock);
+            if (itPrev != mapBlockIndex.end()) {
+                nHeight = itPrev->second->nHeight + 1;
+            } else {
+                return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-height", "Cannot determine block height");
+            }
+        }
+    }
+
+    if (block.vtx[0]->GetValueOut() > (block.IsProofOfWork() ? (GetProofOfWorkReward(block.nBits, nHeight) - nCoinbaseCost) : 0))
         return state.Invalid(BlockValidationResult::BLOCK_CONSENSUS, "bad-cb-amount",
                 strprintf("CheckBlock() : coinbase reward exceeded %s > %s",
                    FormatMoney(block.vtx[0]->GetValueOut()),
-                   FormatMoney(block.IsProofOfWork()? GetProofOfWorkReward(block.nBits, block.GetBlockTime()) : 0)));
+                   FormatMoney(block.IsProofOfWork() ? GetProofOfWorkReward(block.nBits, nHeight) : 0)));
     // Check transactions
     // Must check for duplicate inputs (see CVE-2018-17144)
     for (const auto& tx : block.vtx) {
