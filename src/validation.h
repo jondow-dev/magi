@@ -24,7 +24,7 @@
 #include <script/script_error.h>
 #include <shutdown.h>
 #include <sync.h>
-//#include <chain.h>
+#include <chain.h>
 #include <txdb.h>
 #include <txmempool.h> // For CTxMemPool::cs
 #include <uint256.h>
