@@ -190,16 +190,18 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     block.vtx.resize(txn_available.size());
 
     size_t tx_missing_offset = 0;
+    size_t prefilled_count = 0, mempool_count = 0, extra_count = 0; // Define these
     for (size_t i = 0; i < txn_available.size(); i++) {
         if (!txn_available[i]) {
             if (vtx_missing.size() <= tx_missing_offset)
                 return READ_STATUS_INVALID;
             block.vtx[i] = vtx_missing[tx_missing_offset++];
-        } else
+        } else {
             block.vtx[i] = std::move(txn_available[i]);
+            prefilled_count++; // Adjust as needed
+        }
     }
 
-    // Make sure we can't call FillBlock again.
     header.SetNull();
     txn_available.clear();
 
@@ -209,23 +211,17 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock& block, const std::vector<
     BlockValidationState state;
     CBlockIndex* pindex = nullptr;
     if (block.GetBlockHeader().hashPrevBlock != uint256()) {
-        auto it = mapBlockIndex.find(block.GetBlockHeader().hashPrevBlock);
+        auto it = mapBlockIndex.find(block.GetBlockHeader().hashPrevBlock); // Use g_blockman if needed
         if (it != mapBlockIndex.end()) {
             pindex = it->second;
         }
     }
     CheckBlockFn check_block = m_check_block_mock ? m_check_block_mock : CheckBlock;
     if (!check_block(block, state, Params().GetConsensus(), pindex, /*fCheckPoW=*/true, /*fCheckMerkleRoot=*/true, true)) {
-        // TODO: We really want to just check merkle tree manually here,
-        // but that is expensive, and CheckBlock caches a block's
-        // "checked-status" (in the CBlock?). CBlock should be able to
-        // check its own merkle root and cache that check.
         if (state.GetResult() == BlockValidationResult::BLOCK_MUTATED)
             return READ_STATUS_FAILED;
         return READ_STATUS_CHECKBLOCK_FAILED;
     }
-    return READ_STATUS_OK;
-}
 
     LogPrint(BCLog::CMPCTBLOCK, "Successfully reconstructed block %s with %lu txn prefilled, %lu txn from mempool (incl at least %lu from extra pool) and %lu txn requested\n", hash.ToString(), prefilled_count, mempool_count, extra_count, vtx_missing.size());
     if (vtx_missing.size() < 5) {
