@@ -36,9 +36,6 @@ if (fTestNet) {
             return hash_M7M_v2(BEGIN(nVersion), END(nNonce), nNonce);
         }
     }
-    CBlockHeader tmp(*this);
-    tmp.nFlags = 0;
-    return SerializeHash(tmp);
 }
 
 std::string CBlock::ToString() const
